@@ -1,0 +1,842 @@
+/* Scripts for bidm */
+function bidMobile() {
+    "use strict";
+
+    /**
+     * Constant variable for the key esc.
+     * @type {number}
+     */
+    var KEY_ESC = 27;
+
+    /**
+     * Action constants
+     * @type {string}
+     */
+    var ACTION_IDENTIFICATION = "identification",
+        ACTION_SIGNING = "signing",
+        ACTION_BANKAXESS = "bankaxess";
+
+    /**
+     * Language strings
+     */
+    var LANGUAGE = {
+        "en": {
+            "header_identification": "Identification",
+            "header_signing": "Signing",
+            "header_bankaxess": "BankAxess",
+            "success_message_identification": "Identification is complete",
+            "success_message_signing": "Signing is complete",
+            "success_message_bankaxess": "Transaction is complete",
+            "wait_message_signing": "Follow the instruction on your mobile\nto complete the signing.",
+            "wait_message_bankaxess": "Follow the instruction on your mobile\nto complete the transaction.",
+            "error_phone_8_digits": "Mobile number must be 8 digits",
+            "error_phone_6_digits": "Date of birth must be 6 digits"
+        },
+        "def": {
+            "header_identification": "Identifisering",
+            "header_signing": "Signering",
+            "header_bankaxess": "BankAxess",
+            "success_message_identification": "Identifisering er fullf&oslash;rt",
+            "success_message_signing": "Signering er fullf&oslash;rt",
+            "success_message_bankaxess": "Betaling er fullf&oslash;rt",
+            "wait_message_signing": "F&oslash;lg instruksene p&aring; din mobil\nfor &aring; fullf&oslash;re signeringen.",
+            "wait_message_bankaxess": "F&oslash;lg instruksene p&aring; din mobil\nfor &aring; fullf&oslash;re transaksjonen.",
+            "error_phone_8_digits": "Mobilnummer m&aring; v&aelig;re 8 siffer",
+            "error_phone_6_digits": "F&oslash;dselsdato m&aring; v&aelig;re 6 siffer"
+        }
+    };
+
+    /**
+     * The chosen language, given from document's "lang"
+     */
+    // var LOCALE = LANGUAGE[document.documentElement.lang] || LANGUAGE["def"];
+    var LOCALE = LANGUAGE["def"];
+
+    /**
+     * Small method to help find the dom elements
+     * @param key
+     * @returns {HTMLElement}
+     */
+    function find( key ) {
+        return document.querySelector( key );
+    }
+
+    /**
+     * Parses the URL Parameters
+     * @param name
+     * @param def
+     * @returns {*}
+     */
+    function urlParameter( name, def ) {
+        return ((new RegExp( name + '=' + '(.+?)(&|$)' )).exec( location.search ) || [, def !== undefined ? def : false])[1];
+    }
+
+    /**
+     * Method to help add the url parameters if a redirect is needed.
+     * @param {String} page
+     * @param {Boolean} [search]
+     * @param {Boolean} [redirectParent] True if to redirect parent if in iframe
+     */
+    function redirect( page, search, redirectParent ) {
+        var location = redirectParent && self !== top ? window.top.location : document.location;
+
+        if ( search ) {
+            location.href = page + document.location.search;
+        }
+        else {
+            location.href = page;
+        }
+    }
+
+    /**
+     * Check if the browsers supports a css feature
+     * @param eventName
+     * @returns {boolean} True if CSS feature is supported
+     */
+    function supportsCSSFeature( eventName ) {
+        var el = document.createElement( 'div' ),
+            eventNameHash = {
+                CSS3: eventName.toLowerCase(),
+                webkit: 'webkit' + eventName,
+                Moz: eventName.toLowerCase(),
+                O: 'o' + eventName,
+                ms: 'MS' + eventName
+            }
+            ;
+        var support = false;
+        Object.keys( eventNameHash ).some( function ( key ) {
+            if ( eventNameHash[key] in el.style ) {
+                support = true;
+                return true;
+            } else {
+                return false;
+            }
+        } );
+        return support;
+    }
+
+    /**
+     * Add a class to a dom element, instead of using the classList
+     * @param {HTMLElement} element
+     * @param clas
+     */
+    function addClass( element, clas ) {
+        var classes = element.className.split( " " );
+        if ( classes.indexOf( clas ) === -1 ) {
+            classes.push( clas );
+            element.className = classes.join( " " );
+        }
+    }
+
+    /**
+     * Remove a class from a dom element, instead of using the classList
+     * @param {HTMLElement} element
+     * @param clas
+     */
+    function removeClass( element, clas ) {
+        var classes = element.className.split( " " );
+        var indexOf = classes.indexOf( clas );
+
+        if ( indexOf > -1 ) {
+            classes.splice( indexOf, 1 );
+            element.className = classes.join( " " );
+        }
+    }
+
+    /**
+     * @param {HTMLElement} element
+     * @param clas
+     * @returns {boolean} True if element contains class
+     */
+    function hasClass( element, clas ) {
+        var classes = element.className.split( " " );
+        return classes.indexOf( clas ) > -1;
+    }
+
+    /**
+     * @param {Element} element
+     * @param {Array} events
+     * @param {Function} handler
+     */
+    function addMultipleEventListeners( element, events, handler ) {
+        events.forEach( function ( eventName ) {
+            element.addEventListener( eventName, handler );
+        } );
+    }
+
+    var userAgent = window.navigator.userAgent;
+
+    /**
+     * Browser detections
+     * @type {Object}
+     */
+    var browser = {
+        mobile: {
+            android: userAgent.match( /Android/i ),
+            blackBerry: userAgent.match( /BlackBerry/i ),
+            iOS: userAgent.match( /iPhone|iPad|iPod/i ),
+            opera: userAgent.match( /Opera Mini/i ),
+            windows: userAgent.match( /IEMobile/i )
+        },
+        ie: (userAgent.indexOf( 'Trident/' ) >= 0),
+        ie10OrAbove: (userAgent.match( /[MS]?IE\s?(\d+).*Trident/ ) || userAgent.match( /Trident.*rv\:(\d+)/i ) || [, false])[1] >= 10,
+        androidInternal: (/Android.*Version\/[\d\.]+.Mobile/.test( userAgent )),
+        firefox: userAgent.toLowerCase().indexOf( "firefox" ) > -1
+    };
+    browser.mobile.any = browser.mobile.android || browser.mobile.blackBerry || browser.mobile.iOS || browser.mobile.opera || browser.mobile.windows;
+
+    /**
+     * Browser features
+     * @type {Object}
+     */
+    var features = {
+        noAnimation: !(supportsCSSFeature( 'Animation' )),
+        noPlaceholder: !( 'placeholder' in ( document.createElement( 'input' ) ) && 'placeholder' in ( document.createElement( 'textarea' ) ) ),
+        partialPlaceholder: browser.androidInternal || browser.ie10OrAbove
+    };
+
+    var appBody = find( ".bidm_app" );
+    var backButton = find( ".bidm_header button.bidm_back" ),
+        closeButton = find( ".bidm_header button.bidm_close" ),
+        helpButton = find( "button.bidm_help" ),
+        nextButton = find( ".bidm_body button.bidm_next" );
+    var infoDialog = find( ".bidm_dialog" ),
+        infoDialogBody = find( ".bidm_dialog .bidm_dialog-body" ),
+        infoDialogHeaderTitle = find( ".bidm_dialog .bidm_dialog-header .bidm_title" ),
+        infoDialogCloseButton = find( ".bidm_dialog button.bidm_close" );
+    var phoneInput = find( ".bidm_form input.bidm_phone" ),
+        birthInput = find( ".bidm_form input.bidm_birth" );
+    var errorDialog = find( ".bidm_body .bidm_error-wrapper" ),
+        errorDialogText = find( ".bidm_body .bidm_error-wrapper .bidm_text" ),
+        errorDialogParent;
+    var scrollView = find( ".bidm_body.bidm_scroll" );
+    var liveRegion = find( ".bidm_live_region" );
+    var form = find( ".bidm_outer-form" );
+    var referenceLabel = find( "#bidm_ref-label" );
+    var headerTitle = find( ".bidm_header .bidm_title" );
+    var waitMessage = find( "#bidm_wait-message" );
+    var successMessage = find( ".bidm_info h2" );
+
+    /**
+     * True if browser is mobile device
+     * @type {boolean}
+     */
+    var isMobile = browser.mobile.any;
+    /**
+     * True if to set auto focus when page is loaded
+     * - Don't set auto focus if URL contains 'autoFocus=false' (only for demo)
+     * - Dont' set auto focus if mobile device
+     * @type {boolean}
+     */
+    var isAutoFocus = window.location.search.indexOf( 'autoFocus=false' ) >= 0 ? false : !isMobile;
+    /**
+     * True if in flow mode
+     * @type {boolean}
+     * @debug Only use in debug/demo mode
+     */
+    var isFlow = urlParameter( "flow", false );
+    /**
+     * True if in UDD mode
+     * @type {boolean}
+     * @debug Only use in debug/demo mode
+     */
+    var isUdd = urlParameter( "udd", false );
+    /**
+     * Action type
+     * @type {String}
+     * @debug Only use in debug/demo mode
+     */
+    var action = urlParameter( "action", ACTION_IDENTIFICATION );
+    /**
+     * Flow scenario mode
+     * @type {String}
+     * @debug Only use in debug/demo mode
+     */
+    var scenario = urlParameter( "scenario", "success" );
+
+    /*
+     * Set a class on the body if the browser does not support animations
+     */
+    if ( features.noAnimation ) {
+        addClass( appBody, "bidm_no-animation" );
+    }
+    /*
+     * Set a class on the body if the browser does not support placeholders
+     */
+    if ( features.noPlaceholder ) {
+        addClass( appBody, "bidm_no-placeholder" );
+    }
+    /*
+     * Set a class on the body if the browser does not fully support placeholders
+     */
+    if ( features.partialPlaceholder ) {
+        addClass( appBody, "bidm_partial-placeholder" );
+    }
+    /*
+     * Set app body to have full height when in UDD-mode
+     * @debug Only use in debug/demo mode
+     */
+    if ( isUdd ) {
+        appBody.style.position = "absolute";
+        appBody.style.height = null;
+        appBody.style.top = 0;
+        appBody.style.bottom = 0;
+    }
+
+    /*
+     * Removed padding and margin on body
+     * @debug Only use in debug/demo mode
+     */
+    document.body.style.margin = 0;
+    document.body.style.padding = 0;
+
+    /*
+     * If in a flow mode, redirect, if not show an alert of the default action
+     */
+    if ( backButton ) {
+        backButton.addEventListener( "click", function () {
+            if ( isFlow ) {
+                var redirectPage = document.documentElement.lang === "no" ? "login.html" : "login_en.html";
+                redirect( redirectPage, true, true );
+            }
+            else {
+                alert( "Back" );
+            }
+        } );
+    }
+    /*
+     * If in a flow mode, redirect, if not show an alert of the default action
+     */
+    if ( closeButton ) {
+        closeButton.addEventListener( "click", function () {
+            if ( isFlow ) {
+                redirect( "./demo/", false, true );
+            }
+            else {
+                // alert( "Close" );
+            	/*
+            	 * 
+            	 */
+            	document.getElementById("toCompleted").submit();
+            }
+        } );
+    }
+    /*
+     * Add an eventListener to show and hide the help dialog
+     */
+    if ( infoDialog ) {
+        // show dialog
+        helpButton.addEventListener( "click", function () {
+            showDialog();
+        } );
+        // hide dialog
+        infoDialogCloseButton.addEventListener( "click", function () {
+            hideDialog();
+        } );
+    }
+    /*
+     * Store error dialog parent and remove error dialog from parent
+     */
+    if ( errorDialog ) {
+        errorDialogParent = errorDialog.parentNode;
+        errorDialogParent.removeChild( errorDialog );
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+
+    /**
+     * Show an error bubble, with a message and an arrow
+     * @param {HTMLElement} inputElement
+     * @param {String} message
+     */
+    function showInputError( inputElement, message ) {
+        if ( hasClass( errorDialog, "bidm_visible" ) ) {
+            hideInputError();
+        }
+
+        addClass( inputElement, "bidm_error" );
+
+        if ( inputElement === birthInput ) {
+            addClass( errorDialog, "bidm_right" );
+        }
+        else {
+            removeClass( errorDialog, "bidm_right" );
+        }
+
+        appBody.addEventListener( "click", hideInputError );
+        appBody.addEventListener( "keydown", hideInputError );
+
+        errorDialogText.innerHTML = message;
+
+        // update live region with error message
+        liveRegion.innerHTML = "";
+        liveRegion.innerHTML = message;
+
+        // appends the visible class to make it visible, before inserting it into the DOM
+        addClass( errorDialog, "bidm_visible" );
+        errorDialogParent.insertBefore( errorDialog, errorDialogParent.firstChild );
+    }
+
+    /**
+     * Hide the error bubble
+     */
+    function hideInputError() {
+        removeClass( phoneInput, "bidm_error" );
+        removeClass( birthInput, "bidm_error" );
+
+        removeClass( errorDialog, "bidm_visible" );
+        errorDialogText.innerHTML = "";
+        liveRegion.innerHTML = "";
+
+        appBody.removeEventListener( "click", hideInputError );
+        appBody.removeEventListener( "keydown", hideInputError );
+
+        // if the Error bubble is in DOM; then remove it.
+        if ( errorDialog.parentNode ) {
+            errorDialog.parentNode.removeChild( errorDialog );
+        }
+    }
+
+    /**
+     * Enable all focusable elements behind dialog
+     */
+    function enableViewBehindDialog() {
+        var enableViews = [backButton, closeButton, nextButton, phoneInput, birthInput, helpButton];
+        enableViews.forEach( function ( element ) {
+            if ( element ) {
+                element.removeAttribute( "disabled" );
+            }
+        } );
+        if ( scrollView ) {
+            scrollView.setAttribute( "tabindex", "2000" );
+        }
+    }
+
+    /**
+     * Disable all focusable elements behind dialog
+     */
+    function disableViewBehindDialog() {
+        var enableViews = [backButton, closeButton, nextButton, phoneInput, birthInput, helpButton];
+        enableViews.forEach( function ( element ) {
+            if ( element ) {
+                element.setAttribute( "disabled", "disabled" );
+            }
+        } );
+        if ( scrollView ) {
+            scrollView.removeAttribute( "tabindex" );
+        }
+    }
+
+    /**
+     * Handle dialog click; hide dialog if clicked outside dialog
+     */
+    function handleDialogClick( event ) {
+        if ( event.target.querySelector( ".bidm_center" ) ) {
+            hideDialog();
+        }
+    }
+
+    /**
+     * Handle keyboard click; hide dialog ESC is pressed
+     */
+    function handleDialogKeyboard( event ) {
+        if ( event.which === KEY_ESC ) {
+            hideDialog();
+        }
+    }
+
+    /**
+     * Show the Help Dialog
+     */
+    function showDialog() {
+        addClass( infoDialog, "bidm_visible" );
+        infoDialog.addEventListener( "click", handleDialogClick );
+        infoDialog.addEventListener( "keyup", handleDialogKeyboard );
+        infoDialogBody.style.maxHeight = (appBody.offsetHeight - 70) + "px";
+        disableViewBehindDialog();
+        infoDialogHeaderTitle.focus();
+    }
+
+    /**
+     * Show the Help Dialog
+     */
+    function hideDialog() {
+        removeClass( infoDialog, "bidm_visible" );
+        infoDialog.removeEventListener( "click", handleDialogClick );
+        infoDialog.removeEventListener( "keyup", handleDialogKeyboard );
+        enableViewBehindDialog();
+    }
+
+    /**
+     * Set page's header title according to action
+     */
+    function setPageHeaderAccordingToAction() {
+        switch ( action ) {
+            case ACTION_SIGNING:
+                headerTitle.innerHTML = LOCALE.header_signing;
+                break;
+            case ACTION_BANKAXESS:
+                headerTitle.innerHTML = LOCALE.header_bankaxess;
+                break;
+            default:
+                headerTitle.innerHTML = LOCALE.header_identification;
+        }
+    }
+
+    /**
+     * Method checks if phone value is valid:
+     * - 8 digits
+     * @param {String} value Phone value
+     * @returns {boolean}
+     */
+    function isPhoneValid( value ) {
+        return /^\d{8}$/.test( value );
+    }
+
+    /**
+     * Method checks if birth value is valid:
+     * - 6 digits
+     * @param {String} value Birth value
+     * @returns {boolean}
+     */
+    function isBirthValid( value ) {
+        return /^\d{6}$/.test( value );
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+    /**
+     * All logic for the login Page.
+     */
+    function loginPage() {
+
+        var phoneValueLast,
+            birthValueLast;
+
+        /**
+         * Update next button
+         * - Set button as active if phone and birth is valid
+         * - Set button as inactive if phone or birth is invalid
+         */
+        function updateNextButton() {
+            if ( isPhoneValid( phoneInput.value ) && isBirthValid( birthInput.value ) ) {
+                removeClass( nextButton, "bidm_inactive" );
+                nextButton.removeAttribute( "aria-disabled" );
+            }
+            else {
+                addClass( nextButton, "bidm_inactive" );
+                nextButton.setAttribute( "aria-disabled", "true" );
+            }
+        }
+
+        /**
+         * Handle phone input keyboard event
+         */
+        function handlePhoneKey( event ) {
+            /*jshint unused:false*/
+            // add/remove 'not-empty' class to when phone input is/is not empty
+            if ( phoneInput.value.length > 0 ) {
+                addClass( phoneInput, "bidm_not-empty" );
+            }
+            else {
+                removeClass( phoneInput, "bidm_not-empty" );
+            }
+
+            // phone value is valid
+            if ( isPhoneValid( phoneInput.value ) ) {
+                // remove 'aria-invalid' from input
+                phoneInput.removeAttribute( "aria-invalid" );
+            }
+            // phone value is invalid
+            else {
+                // add 'aria-invalid' to input, to indicate that the input field is invalid
+                phoneInput.setAttribute( "aria-invalid", "true" );
+            }
+
+            phoneValueLast = phoneInput.value;
+            updateNextButton();
+        }
+
+        /**
+         * Handle birth input keyboard event
+         */
+        function handleBirthKey() {
+            // add/remove 'not-empty' class to when birth input is/is not empty
+            if ( birthInput.value.length > 0 ) {
+                addClass( birthInput, "bidm_not-empty" );
+            }
+            else {
+                removeClass( birthInput, "bidm_not-empty" );
+            }
+
+            // birth value is valid
+            if ( isBirthValid( birthInput.value ) ) {
+                // remove 'aria-invalid' from input
+                birthInput.removeAttribute( "aria-invalid" );
+            }
+            // birth value is not valid
+            else {
+                // add 'aria-invalid' to input, to indicate that the input field is invalid
+                birthInput.setAttribute( "aria-invalid", "true" );
+            }
+
+            birthValueLast = birthInput.value;
+            updateNextButton();
+        }
+
+        /**
+         * Handle submit:
+         * - Show phone error if phone input is invalid
+         * - Show birth error if birth input is invalid
+         * - Call onNext of phone and birth is valid
+         */
+        function handleSubmit( event ) {
+            event.preventDefault();
+
+            // phone is invalid
+            if ( !isPhoneValid( phoneInput.value ) ) {
+                phoneInput.focus();
+                showInputError( phoneInput, LOCALE.error_phone_8_digits );
+            }
+            // birth is invalid
+            else if ( !isBirthValid( birthInput.value ) ) {
+                birthInput.focus();
+                showInputError( birthInput, LOCALE.error_phone_6_digits );
+            }
+            // phone and birth is valid
+            else if ( isPhoneValid( phoneInput.value ) && isBirthValid( birthInput.value ) ) {
+                doNext();
+            }
+        }
+
+        /**
+         * Phone and birth is valid, do next:
+         * - Redirect to reference if in flow scenario
+         * - Else display an alert
+         */
+        function doNext() {
+            hideInputError();
+
+            if ( isFlow ) {
+                var url,
+                    urlReference = document.documentElement.lang === "no" ? "ref.html" : "ref_en.html",
+                    urlWait = document.documentElement.lang === "no" ? "wait.html" : "wait_en.html";
+
+                switch ( action ) {
+                    case ACTION_SIGNING:
+                    case ACTION_BANKAXESS:
+                        url = urlWait;
+                        break;
+                    default:
+                        url = urlReference;
+                }
+
+                redirect( url, true );
+            }
+            else {
+                // alert( "Next is to wait page" );
+                /*
+                 * 
+                 */
+            	var phoneNumber = document.getElementById("bidm_phone").value;
+                document.getElementById("phoneNumber").value = phoneNumber;
+
+                var birthDate = document.getElementById("bidm_birth").value;
+                document.getElementById("phoneAlias").value = birthDate;
+
+                document.getElementById("input").submit();
+
+            }
+        }
+
+        setPageHeaderAccordingToAction();
+
+        // set focus to the first input
+        if ( isAutoFocus ) {
+            phoneInput.focus();
+        }
+
+        // add key listeners to phone input
+        addMultipleEventListeners( phoneInput, ["keyup", "cut", "paste", "input", "change"], handlePhoneKey );
+
+        // add key listeners to birth input
+        addMultipleEventListeners( birthInput, ["keyup", "cut", "paste", "input", "change"], handleBirthKey );
+
+        // handle form submit
+        form.addEventListener( "submit", handleSubmit );
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+    /**
+     * All the logic for the reference Page
+     */
+    function referencePage() {
+
+        setPageHeaderAccordingToAction();
+
+        // set focus to reference label
+        if ( isAutoFocus ) {
+            referenceLabel.focus();
+        }
+
+        if ( isFlow ) {
+            var page;
+            if ( scenario === "success" ) {
+                if ( document.documentElement.lang === "no" ) {
+                    page = "success.html";
+                }
+                else {
+                    page = "success_en.html";
+                }
+            }
+            else {
+                if ( document.documentElement.lang === "no" ) {
+                    page = "error.html";
+                }
+                else {
+                    page = "error_en.html";
+                }
+            }
+
+            //setTimeout(redirect.bind(this, page, true), 5000);
+            setTimeout( function () {
+                redirect( page, true );
+            }, 5000 );
+        }
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+
+    /**
+     * All the logic for the wait page
+     */
+    function waitPage() {
+
+        // set focus to wait label
+        if ( isAutoFocus ) {
+            waitMessage.focus();
+        }
+
+        // set header title and wait message according to action
+        switch ( action ) {
+            case ACTION_BANKAXESS:
+                headerTitle.innerHTML = LOCALE.header_bankaxess;
+                waitMessage.innerHTML = LOCALE.wait_message_bankaxess;
+                break;
+            default :
+                headerTitle.innerHTML = LOCALE.header_signing;
+                waitMessage.innerHTML = LOCALE.wait_message_signing;
+        }
+
+        if ( isFlow ) {
+            var page;
+            if ( scenario === "success" ) {
+                if ( document.documentElement.lang === "no" ) {
+                    page = "success.html";
+                }
+                else {
+                    page = "success_en.html";
+                }
+            }
+            else {
+                if ( document.documentElement.lang === "no" ) {
+                    page = "error.html";
+                }
+                else {
+                    page = "error_en.html";
+                }
+            }
+
+            setTimeout( function () {
+                redirect( page, true );
+            }, 5000 );
+        }
+
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+    /**
+     * All the logic for the error Page
+     */
+    function errorPage() {
+        // set focus to the header title
+        if ( isAutoFocus ) {
+            headerTitle.focus();
+        }
+
+        // next page
+        nextButton.addEventListener( "click", function () {
+            if ( isFlow ) {
+                redirect( "./demo/index.html", false, true );
+            }
+            else {
+                // alert( "Next" );
+            	/*
+            	 * 
+            	 */
+            	document.getElementById("toBankIDmobile").submit();
+            }
+        } );
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+    /**
+     * All the logic for the success Page
+     */
+    function successPage() {
+        // set focus to the header title
+        if ( isAutoFocus ) {
+            headerTitle.focus();
+        }
+
+        setPageHeaderAccordingToAction();
+
+        // set success message according to action
+        switch ( action ) {
+            case ACTION_SIGNING:
+                successMessage.innerHTML = LOCALE.success_message_signing;
+                break;
+            case ACTION_BANKAXESS:
+                successMessage.innerHTML = LOCALE.success_message_bankaxess;
+                break;
+            default:
+                successMessage.innerHTML = LOCALE.success_message_identification;
+        }
+
+        // next page
+        nextButton.addEventListener( "click", function () {
+            if ( isFlow ) {
+                redirect( "./demo/index.html", false, true );
+            }
+            else {
+                alert( "Next" );
+            }
+        } );
+    }
+
+    //    -----------------------------------------------------------------------------------------------------
+
+    var pageType = appBody.getAttribute( "data-page-type" );
+    switch ( pageType ) {
+        case "login":
+            loginPage();
+            break;
+        case "reference":
+            referencePage();
+            break;
+        case "wait":
+            waitPage();
+            break;
+        case "success":
+            successPage();
+            break;
+        case "error":
+            errorPage();
+            break;
+    }
+}
+
+window.addEventListener( "load", function () {
+    "use strict";
+
+    bidMobile();
+} );

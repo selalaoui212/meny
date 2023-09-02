@@ -1,0 +1,161 @@
+﻿(function () {
+
+    //#region manage with IE7
+    // check if browser supports querySelectorAll function (ie7 doesn`t support)
+    if (!document.querySelectorAll) {
+        alert("Browser doesn`t support current solution");
+        return;
+    }
+    //#endregion
+
+    //#region manage button actions
+    (function() {
+        // get all buttons with actions
+        var buttons = document.querySelectorAll('[data-action]');
+
+        // do nothing if there are no buttons on the page
+        if (!buttons.length) return;
+
+        // iterate on buttons
+        for (var i = 0; i < buttons.length; i++) {
+            // stop if item is not a button
+            if (!buttons[i].nodeType) break;
+
+            buttons[i].onclick = function () {
+                //get button properties
+                var manage = this.getAttribute('data-manage');
+                var action = this.getAttribute('data-action');
+                var form = document.querySelector('[data-form="' + manage + '"]');
+
+                if (action === 'close') {
+                    window.doclose();
+                }
+
+                // stop on wrong data properties
+                if (!manage || !form) return false;
+
+                // bind click events
+                if (action == 'reset') {
+                    form.reset();
+                }
+                if (action == 'submit') {
+                    form.dosubmit();
+                    //form.submit();
+                }
+                return false;
+            };
+        }
+    })();
+    //#endregion
+
+    //#region submit form on Enter press
+    // catch the press Enter event to submit form
+    document.body.onkeypress = function (e) {
+        if (e.keyCode == 13) {
+            var element = document.activeElement;
+            // if not an input (avoid submin on textarea and select)
+            if (element.tagName != 'INPUT') return;
+            // if no form for input
+            if (!element.form) return;
+            // if no data-form property in form
+            if (!element.form.getAttribute('data-form')) return;
+
+            element.form.dosubmit();
+            return false; // added 01092015
+            //element.form.submit();
+        }
+    };
+    //#endregion
+
+    //#region fields validation
+    // variables
+    var errorClass = 'tds-error';   // css class for fields with error
+    var regexp = [];
+    regexp['cc_expire'] = /^[0-9]{4}$/;
+    regexp['cc_number'] = /^[0-9]{16}$/;
+    regexp['cc_date'] = /^[0-9]{2}.[0-9]{2}.[0-9]{4}$/;
+
+    // check date correctness
+    Date.prototype.test = function (year, month, day) {
+        return ((this.getDate() == day) && (this.getMonth() == month) && (this.getFullYear() == year));
+    };
+
+    // check date expire
+    Date.prototype.expired = function () {
+        return (this.getTime() < (new Date()).getTime());
+    };
+
+    // validate input fields
+    HTMLInputElement.prototype.validate = function () {
+        var type = this.getAttribute('data-type');
+        var date, result, year, month, day;
+        switch (type) {
+            case 'cc_expire':
+                year = "20" + this.value[2] + this.value[3];
+                month = parseInt("" + this.value[0] + this.value[1], 10) - 1;
+                day = (new Date(year, month + 1, 0)).getDate(); // take last day of the month for expire validation
+                date = new Date(year, month, day);
+                result = (regexp['cc_expire'].test(this.value) && date.test(year, month, day) && !date.expired(year, month, day));
+                break;
+            case 'cc_number':
+                result = regexp['cc_number'].test(this.value);
+                break;
+            case 'cc_date':
+                year = parseInt("" + this.value[6] + this.value[7] + this.value[8] + this.value[9],10);
+                month = parseInt("" + this.value[3] + this.value[4], 10) - 1;
+                day = parseInt("" + this.value[0] + this.value[1],10);
+                date = new Date(year, month, day);
+                result = (regexp['cc_date'].test(this.value) && date.test(year, month, day));
+                break;
+            default:
+                result = true;
+                break;
+        }
+
+        return result;
+    };
+
+    // bind validation on blur for the fields
+    var validates = document.querySelectorAll('input[data-type]');
+    (function () {
+        if (!validates.length) return;
+        for (var j = 0; j < validates.length; j++) {
+            if (!validates[j].nodeType) break;
+            validates[j].onblur = function () {
+                if (!this.validate()) {
+                    this.className = errorClass;
+                } else {
+                    this.className = "";
+                }
+            };
+            validates[j].onfocus = function () {
+                this.className = "";
+            };
+        }
+    })();
+    //#endregion
+
+    //#region
+    // disable buttons on form submit
+    HTMLFormElement.prototype.dosubmit = function () {
+        var buttons = document.querySelectorAll('[data-manage]');
+        for (var b = 0; b < buttons.length; b++) {
+            buttons[b].className = (buttons[b].className) ? buttons[b].className + ' disabled' : "disabled";
+            buttons[b].onclick = function () {
+                return false;
+            };
+        }
+        this.submit();
+    };
+    //#endregion
+    
+    //#region window self close
+    
+    window.doclose = function (timeout) {
+        if (!parseInt(timeout, 10))
+            timeout = 0;
+        setTimeout("open(location, '_self').close()", timeout);
+        return false;
+    };
+    //#endregion
+})();
